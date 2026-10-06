@@ -636,6 +636,7 @@ router.get('/', (req, res) => {
         // Standardwerte für neue Termine (per-user, #497/#498).
         calendar_default_reminders: parseDefaultReminders(cfgUserGet('calendar_default_reminders', req.authUserId)),
         calendar_default_assign_me: cfgUserGet('calendar_default_assign_me', req.authUserId) === '1',
+        notify_only_assigned_events: cfgUserGet('notify_only_assigned_events', req.authUserId) === '1',
         calendar_default_target: cfgUserGet('calendar_default_target', req.authUserId) || '',
         // Modul-Feature-Schalter (haushaltweit). Default an: fehlender Wert =>
         // Feature aktiv, damit Bestandshaushalte ihr Verhalten behalten.
@@ -711,7 +712,7 @@ router.put('/', (req, res) => {
   try {
     database = db.get();
     database.exec('BEGIN');
-    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, rewards_require_approval, tasks_subtasks_expanded, tasks_default_points, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
+    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, notify_only_assigned_events, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, rewards_require_approval, tasks_subtasks_expanded, tasks_default_points, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
 
     // Welche Quickstart-Vorlagen der Schichtplan-Schnellstart zeigt - wie
     // disabled_modules haushaltweit und admin-only, nicht wie hidden_modules
@@ -1068,6 +1069,11 @@ router.put('/', (req, res) => {
     // Neue Termine standardmäßig mir zuweisen (#498, per-user).
     if (calendar_default_assign_me !== undefined) {
       cfgUserSet('calendar_default_assign_me', req.authUserId, calendar_default_assign_me ? '1' : '0');
+    }
+
+    // Nur Termine melden, die mir zugewiesen sind (per-user, Opt-in).
+    if (notify_only_assigned_events !== undefined) {
+      cfgUserSet('notify_only_assigned_events', req.authUserId, notify_only_assigned_events ? '1' : '0');
     }
 
     // Standard-Sync-Ziel für eigene neue Termine (#620, per-user).
@@ -1441,6 +1447,7 @@ router.put('/', (req, res) => {
         calendar_default_duration: Number(cfgGet('calendar_default_duration')) || DEFAULT_CALENDAR_DURATION,
         calendar_default_reminders: parseDefaultReminders(cfgUserGet('calendar_default_reminders', req.authUserId)),
         calendar_default_assign_me: cfgUserGet('calendar_default_assign_me', req.authUserId) === '1',
+        notify_only_assigned_events: cfgUserGet('notify_only_assigned_events', req.authUserId) === '1',
         calendar_default_target: cfgUserGet('calendar_default_target', req.authUserId) || '',
         ...healthCycleViews(req.authUserId),
         // Betreuungs-Fan-out fuer Vorsorge-Erinnerungen (D6/Review #1256) -

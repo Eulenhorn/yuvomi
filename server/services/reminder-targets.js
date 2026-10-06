@@ -222,3 +222,38 @@ export function reminderTargetPublicSql(database, alias = 'r') {
     ELSE 0
   END) = 1`;
 }
+
+/**
+ * Preference key (per user, stored in `sync_config` as `<key>:user:<id>`):
+ * "only notify me about calendar events that are assigned to me".
+ */
+export const NOTIFY_ONLY_ASSIGNED_EVENTS_KEY = 'notify_only_assigned_events';
+
+/**
+ * WHERE-Fragment (ohne fuehrendes AND) fuer eine Abfrage ueber `reminders`:
+ * falsch fuer eine Termin-Erinnerung, deren Empfaenger (`created_by`) den
+ * Filter "nur zugewiesene Termine" eingeschaltet hat und dem der Termin NICHT
+ * zugewiesen ist. Alles andere (Aufgaben, andere Herkuenfte, Nutzer ohne den
+ * Filter, zugewiesene Termine) bleibt unberuehrt.
+ *
+ * Wie bei den Sichtbarkeits-Filtern oben: UEBERSPRUNGEN, NICHT GELOESCHT. Wer
+ * den Filter wieder ausschaltet oder dem Termin zugewiesen wird, bekommt die
+ * Erinnerung dann doch noch. Der Filter steht in der Abfrage und damit vor Push
+ * UND Kanaelen sowie vor dem In-App-Toast (`GET /reminders/pending`).
+ *
+ * @param {string} alias  Alias der reminders-Tabelle in der Abfrage
+ */
+export function reminderAssignedOnlySql(alias = 'r') {
+  return `NOT (
+    ${alias}.entity_type = 'event'
+    AND EXISTS (
+      SELECT 1 FROM sync_config pref
+      WHERE pref.key = '${NOTIFY_ONLY_ASSIGNED_EVENTS_KEY}:user:' || ${alias}.created_by
+        AND pref.value = '1'
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM event_assignments ea
+      WHERE ea.event_id = ${alias}.entity_id AND ea.user_id = ${alias}.created_by
+    )
+  )`;
+}

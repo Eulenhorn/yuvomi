@@ -21,7 +21,7 @@ import { syncAllCycleReminders } from './cycle-reminders.js';
 import { syncAllScheduleReminders } from './schedule-reminders.js';
 import { syncAllWasteReminders } from './waste-reminders.js';
 import { withoutModulesDeniedToRecipient, withoutSwitchedOffModules } from './reminder-origins.js';
-import { reminderTargetPublicSql, reminderTargetVisibleSql } from './reminder-targets.js';
+import { reminderAssignedOnlySql, reminderTargetPublicSql, reminderTargetVisibleSql } from './reminder-targets.js';
 import { syncAllPreventionReminders } from './prevention-reminders.js';
 import { syncAllFastingReminders } from './fasting-reminders.js';
 import { remindAtCompareKey, remindAtUtcSql } from '../utils/reminder-schedule.js';
@@ -586,6 +586,9 @@ export async function processDueNotifications({
       -- der Empfaenger ihr Ziel wieder sieht. Der Filter steht in der Abfrage
       -- und damit vor Push UND Kanaelen.
       AND ${reminderTargetVisibleSql(activeDb, 'r')}
+      -- Opt-in je Nutzer: nur Termine melden, die ihm zugewiesen sind. Uebersprungen,
+      -- nicht geloescht (services/reminder-targets.js, reminderAssignedOnlySql).
+      AND ${reminderAssignedOnlySql('r')}
       -- NICHTS GEHT AN EIN EHEMALIGES KONTO (#1381). Das Deaktivieren loescht
       -- die offenen Erinnerungen, Push-Abos und eigenen Kanaele des Kontos;
       -- einer der Abgleiche oben kann eine Zeile aber neu anlegen, und fuer

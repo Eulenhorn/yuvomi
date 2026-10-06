@@ -1084,6 +1084,44 @@ test('task reminders keep their bare title as body (#581)', async () => {
   assert.equal(payloads[0].body, 'Müll rausbringen');
 });
 
+test('notify_only_assigned_events skips event reminders for unassigned events, per recipient', async () => {
+  const { createNotificationChannelStore } = await import('../server/services/notification-channels.js');
+  const { processDueNotifications } = await import('../server/services/notifications.js');
+  const db = makeDb();
+  const store = createNotificationChannelStore({ db });
+  db.prepare("INSERT INTO calendar_events (id, title, created_by) VALUES (1, 'Zahnarzt', 1), (2, 'Elternabend', 1)").run();
+  db.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (1, 1)').run();
+  db.prepare("INSERT INTO tasks (id, title, created_by) VALUES (1, 'Müll rausbringen', 1)").run();
+  // Alice (1) hat den Filter an, Bob (2) nicht.
+  db.prepare("INSERT INTO sync_config (key, value) VALUES ('notify_only_assigned_events:user:1', '1')").run();
+  for (const userId of [1, 2]) {
+    db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, 'p', 'a')")
+      .run(userId, `https://push/${userId}`);
+  }
+  const at = '2026-06-19T09:59:00.000Z';
+  const insert = db.prepare('INSERT INTO reminders (entity_type, entity_id, remind_at, created_by) VALUES (?, ?, ?, ?)');
+  insert.run('event', 1, at, 1); // zugewiesen -> kommt
+  insert.run('event', 2, at, 1); // nicht zugewiesen -> uebersprungen
+  insert.run('task', 1, at, 1);  // Aufgaben bleiben unberuehrt
+  insert.run('event', 2, at, 2); // Bob ohne Filter -> kommt
+
+  const sent = [];
+  const pushService = { sendPushToUser: async (userId, payload) => { sent.push([userId, payload.body]); return 1; } };
+  const run = () => processDueNotifications({ database: db, channelStore: store, pushService, providers: {}, now: new Date() });
+
+  const first = await run();
+  assert.equal(first.due, 3);
+  assert.deepEqual(sent.map(([u, b]) => `${u}:${b}`).sort(), ['1:Müll rausbringen', '1:Zahnarzt', '2:Elternabend']);
+  // Uebersprungen, nicht verbraucht: die Zeile bleibt ausstehend.
+  assert.equal(db.prepare("SELECT pushed_at FROM reminders WHERE entity_id = 2 AND created_by = 1").get().pushed_at, null);
+
+  // Filter aus -> die uebersprungene Erinnerung geht doch noch raus.
+  db.prepare("UPDATE sync_config SET value = '0' WHERE key = 'notify_only_assigned_events:user:1'").run();
+  const second = await run();
+  assert.equal(second.due, 1);
+  assert.ok(sent.some(([u, b]) => u === 1 && b === 'Elternabend'));
+});
+
 test('reminders for deleted entities never send the app name as body (#581)', async () => {
   const { createNotificationChannelStore } = await import('../server/services/notification-channels.js');
   const { processDueNotifications } = await import('../server/services/notifications.js');

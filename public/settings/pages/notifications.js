@@ -8,6 +8,7 @@ import { confirmModal } from '/components/modal.js';
 import { esc } from '/utils/html.js';
 import { getPwaInstallState } from '/utils/pwa-install.js';
 import { toggleRowHtml } from '/settings/components.js';
+import { getPreferences, savePreferences } from '/settings/preferences-cache.js';
 
 const DEFAULT_PROVIDERS = [
   { id: 'gotify', name: 'Gotify' },
@@ -98,9 +99,53 @@ function renderPage(container, user) {
         </div>
       </div>
     </section>
+    <section class="settings-section">
+      <h2 class="settings-section__title">${t('settings.notifyOnlyAssignedTitle')}</h2>
+      <div class="settings-card">
+        <div class="settings-card__body">
+          ${toggleRowHtml({
+            control: 'switch',
+            label: t('settings.notifyOnlyAssignedLabel'),
+            disabled: true,
+            attrs: { id: 'notify-only-assigned-events', 'aria-describedby': 'notify-only-assigned-hint' },
+          })}
+          <p class="form-hint" id="notify-only-assigned-hint">${t('settings.notifyOnlyAssignedHint')}</p>
+        </div>
+      </div>
+    </section>
     <section class="settings-section" id="notification-channels-section"></section>
   `);
   renderChannelShell(container, user);
+}
+
+// Instant-Save wie in personal-calendar.js: ein Wert, kein Speichern-Button.
+// Der Schalter bleibt gesperrt, bis der gespeicherte Stand geladen ist - sonst
+// koennte ein Klick vor der Antwort den falschen Zustand schreiben.
+async function setupAssignedOnlyToggle(container) {
+  const toggle = container.querySelector('#notify-only-assigned-events');
+  if (!toggle) return;
+  try {
+    const preferences = await getPreferences();
+    if (!toggle.isConnected) return;
+    toggle.checked = !!preferences.notify_only_assigned_events;
+    toggle.disabled = false;
+  } catch (error) {
+    window.yuvomi?.showToast(error.message || t('common.errorGeneric'), 'danger');
+    return;
+  }
+  toggle.addEventListener('change', async () => {
+    const value = toggle.checked;
+    toggle.disabled = true;
+    try {
+      await savePreferences({ notify_only_assigned_events: value });
+      window.yuvomi?.showToast(t('settings.notifyOnlyAssignedSaved'), 'success');
+    } catch (error) {
+      toggle.checked = !value; // Rollback
+      window.yuvomi?.showToast(error.message || t('common.errorGeneric'), 'danger');
+    } finally {
+      if (toggle.isConnected) toggle.disabled = false;
+    }
+  });
 }
 
 function renderChannelShell(container, user) {
@@ -440,6 +485,8 @@ export async function render(container, { user } = {}) {
   try {
     renderPage(container, user);
     window.lucide?.createIcons({ el: container });
+    // Vor dem Web-Push-Zweig, der bei fehlender Unterstuetzung frueh zurueckkehrt.
+    setupAssignedOnlyToggle(container);
     await setupChannelControls(container, user);
 
     const toggle  = container.querySelector('#push-toggle');

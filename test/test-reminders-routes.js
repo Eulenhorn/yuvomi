@@ -200,6 +200,38 @@ test('GET /pending schließt zukünftige und verworfene Erinnerungen aus', async
   assert.equal(res.body.data[0].entity_id, t);
 });
 
+test('GET /pending: notify_only_assigned_events blendet nicht zugewiesene Termine aus, nur für den Nutzer mit dem Filter', async () => {
+  const me = freshUser();
+  const other = freshUser();
+  const assigned = makeEvent(me, 'Zugewiesen');
+  const unassigned = makeEvent(me, 'Nicht zugewiesen');
+  db.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(assigned, me);
+  const task = makeTask(me);
+  insertReminder(me, 'event', assigned, PAST);
+  insertReminder(me, 'event', unassigned, PAST);
+  insertReminder(me, 'task', task, PAST);
+  insertReminder(other, 'event', unassigned, PAST);
+
+  // Ohne den Filter: alles da (heutiges Verhalten bleibt Standard).
+  currentUid = me;
+  assert.equal((await call('GET', '/pending')).body.data.length, 3);
+
+  const key = `notify_only_assigned_events:user:${me}`;
+  db.prepare('INSERT INTO sync_config (key, value) VALUES (?, ?)').run(key, '1');
+  try {
+    const res = await call('GET', '/pending');
+    assert.deepEqual(
+      res.body.data.map((r) => `${r.entity_type}:${r.entity_id}`).sort(),
+      [`event:${assigned}`, `task:${task}`].sort(),
+    );
+    // Der andere Nutzer hat den Filter nicht und sieht seine Erinnerung weiter.
+    currentUid = other;
+    assert.equal((await call('GET', '/pending')).body.data.length, 1);
+  } finally {
+    db.prepare('DELETE FROM sync_config WHERE key = ?').run(key);
+  }
+});
+
 test('GET /pending ist sortiert nach remind_at aufsteigend', async () => {
   const owner = freshUser();
   currentUid = owner;

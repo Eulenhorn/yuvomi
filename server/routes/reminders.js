@@ -13,7 +13,7 @@ import { fanOutEventReminders, eventAuthorId } from '../services/event-reminder-
 import { deniedModules } from '../permissions.js';
 import { tokenAllows } from '../scopes.js';
 import { ORIGIN_MODULE, withoutSwitchedOffModules } from '../services/reminder-origins.js';
-import { reminderTargetVisible, reminderTargetVisibleSql } from '../services/reminder-targets.js';
+import { reminderAssignedOnlySql, reminderTargetVisible, reminderTargetVisibleSql } from '../services/reminder-targets.js';
 import { remindAtCompareKey, remindAtUtcSql } from '../utils/reminder-schedule.js';
 
 const log    = createLogger('Reminders');
@@ -264,6 +264,8 @@ router.get('/pending', (req, res) => {
         -- nichts ueber die einzelne Aufgabe, und die Sichtbarkeit aendert sich
         -- nach dem Anlegen. Uebersprungen, nicht geloescht.
         AND ${reminderTargetVisibleSql(db.get(), 'r')}
+        -- Opt-in je Nutzer: nur zugewiesene Termine (gleiche Klausel wie die Zustellung).
+        AND ${reminderAssignedOnlySql('r')}
         -- Eine 'cycle_period'/'cycle_log_nudge'-Zeile, deren Anker bereits
         -- geloescht wurde (Eigentuemer geloescht, Einstellung geaendert, o.ae.),
         -- aber deren periodischer Sync noch nicht wieder gelaufen ist, darf
